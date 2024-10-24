@@ -32,52 +32,27 @@
     <!-- Microphone list will be populated here -->
   </ul>
 
-  <button id="refresh-button">Refresh Microphone List</button>
-
   <script>
-    function enumerateMicrophones() {
-      navigator.mediaDevices.enumerateDevices()
-        .then(function(devices) {
-          const audioInputDevices = devices.filter(device => device.kind === 'audioinput');
-          const microphoneList = document.getElementById('microphone-list');
-          microphoneList.innerHTML = ''; // Clear the list
+    navigator.mediaDevices.enumerateDevices()
+      .then(function(devices) {
+        const audioInputDevices = devices.filter(device => device.kind === 'audioinput');
+        const microphoneList = document.getElementById('microphone-list');
 
-          if (audioInputDevices.length > 0) {
-            audioInputDevices.forEach((device, index) => {
-              const listItem = document.createElement('li');
-              listItem.textContent = `${index + 1}: ${device.label || 'Unnamed Microphone'} (ID: ${device.deviceId || 'No ID'})`;
-              microphoneList.appendChild(listItem);
-            });
-          } else {
-            const noMicrophones = document.createElement('li');
-            noMicrophones.textContent = 'No microphones found.';
-            microphoneList.appendChild(noMicrophones);
-          }
-        })
-        .catch(function(err) {
-          console.error('Error enumerating devices:', err);
-        });
-    }
-
-    // Request access to the microphone and enumerate devices
-    function requestMicrophoneAccess() {
-      navigator.mediaDevices.getUserMedia({ audio: true })
-        .then(function(stream) {
-          // After permission is granted, enumerate devices
-          enumerateMicrophones();
-        })
-        .catch(function(err) {
-          console.error('Error accessing microphone:', err);
-        });
-    }
-
-    // Add an event listener to refresh the list
-    document.getElementById('refresh-button').addEventListener('click', function() {
-      enumerateMicrophones();
-    });
-
-    // Request access and enumerate on page load
-    requestMicrophoneAccess();
+        if (audioInputDevices.length > 0) {
+          audioInputDevices.forEach((device, index) => {
+            const listItem = document.createElement('li');
+            listItem.textContent = `${index + 1}: ${device.label || 'Unnamed Microphone'} (ID: ${device.deviceId})`;
+            microphoneList.appendChild(listItem);
+          });
+        } else {
+          const noMicrophones = document.createElement('li');
+          noMicrophones.textContent = 'No microphones found.';
+          microphoneList.appendChild(noMicrophones);
+        }
+      })
+      .catch(function(err) {
+        console.error('Error enumerating devices:', err);
+      });
   </script>
 
 </body>
