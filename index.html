@@ -1,121 +1,123 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Equalizer for Virtual Microphone</title>
-    <style>
-        .slider {
-            width: 300px;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Microphone Enumerator with Playback</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background-color: #f5f5f5;
+    }
+    h1 {
+      font-size: 24px;
+      color: #333;
+    }
+    ul {
+      list-style-type: none;
+      padding: 0;
+    }
+    li {
+      padding: 8px;
+      background-color: #eee;
+      margin: 4px 0;
+    }
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    #playbackStatus {
+      margin-top: 10px;
+      color: green;
+    }
+  </style>
 </head>
 <body>
-    <h1>Spotify Virtual Input with Equalizer</h1>
-    
-    <!-- Sliders for EQ -->
-    <div>
-        <label for="bass">Bass (60 Hz): </label>
-        <input type="range" id="bass" class="slider" min="-30" max="30" value="0">
-        <span id="bassValue">0</span> dB
-    </div>
 
-    <div>
-        <label for="treble">Treble (10 kHz): </label>
-        <input type="range" id="treble" class="slider" min="-30" max="30" value="0">
-        <span id="trebleValue">0</span> dB
-    </div>
+  <h1>Available Microphones</h1>
+  <ul id="microphone-list">
+    <!-- Microphone list will be populated here -->
+  </ul>
 
-    <button id="startBtn">Start</button>
-    <button id="stopBtn" disabled>Stop</button>
-    <p id="status">Click "Start" to play your virtual input audio with the equalizer in real-time.</p>
+  <button id="playback-button">Start Microphone Playback</button>
+  <p id="playbackStatus"></p>
 
-    <script>
-        const startBtn = document.getElementById('startBtn');
-        const stopBtn = document.getElementById('stopBtn');
-        const status = document.getElementById('status');
+  <script>
+    const playbackButton = document.getElementById('playback-button');
+    const playbackStatus = document.getElementById('playbackStatus');
+    let audioContext;
+    let microphoneStream;
+    let sourceNode;
+    let isPlaying = false;
 
-        // Equalizer sliders and value spans
-        const bassSlider = document.getElementById('bass');
-        const trebleSlider = document.getElementById('treble');
-        const bassValue = document.getElementById('bassValue');
-        const trebleValue = document.getElementById('trebleValue');
+    // Enumerate devices and list microphones
+    navigator.mediaDevices.enumerateDevices()
+      .then(function(devices) {
+        const audioInputDevices = devices.filter(device => device.kind === 'audioinput');
+        const microphoneList = document.getElementById('microphone-list');
 
-        let audioContext;
-        let micInput;
-        let stream;
-        let bassFilter, trebleFilter, gainNode;
+        if (audioInputDevices.length > 0) {
+          audioInputDevices.forEach((device, index) => {
+            const listItem = document.createElement('li');
+            listItem.textContent = `${index + 1}: ${device.label || 'Unnamed Microphone'} (ID: ${device.deviceId})`;
+            microphoneList.appendChild(listItem);
+          });
+        } else {
+          const noMicrophones = document.createElement('li');
+          noMicrophones.textContent = 'No microphones found.';
+          microphoneList.appendChild(noMicrophones);
+        }
+      })
+      .catch(function(err) {
+        console.error('Error enumerating devices:', err);
+      });
 
-        // Update displayed values for sliders
-        bassSlider.oninput = () => {
-            bassValue.textContent = bassSlider.value;
-            if (bassFilter) bassFilter.gain.value = bassSlider.value;
-        };
+    // Function to start microphone playback
+    function startMicrophonePlayback() {
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(function(stream) {
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          microphoneStream = stream;
+          sourceNode = audioContext.createMediaStreamSource(microphoneStream);
 
-        trebleSlider.oninput = () => {
-            trebleValue.textContent = trebleSlider.value;
-            if (trebleFilter) trebleFilter.gain.value = trebleSlider.value;
-        };
+          // Connect the source to the audio context destination (speakers)
+          sourceNode.connect(audioContext.destination);
 
-        startBtn.addEventListener('click', async () => {
-            try {
-                // Request microphone (virtual input in this case) access
-                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-                // Create an audio context with increased buffer size and matching sample rate
-                audioContext = new (window.AudioContext || window.webkitAudioContext)({
-                    latencyHint: 'playback', // Use 'playback' for more buffer and smoother output
-                    sampleRate: 44100 // Match standard sample rate for audio (44.1kHz)
-                });
-
-                // Create a media stream source from the virtual microphone input
-                micInput = audioContext.createMediaStreamSource(stream);
-
-                // Create BiquadFilterNodes for bass and treble with lower Q for smoother adjustments
-                bassFilter = audioContext.createBiquadFilter();
-                bassFilter.type = "lowshelf";
-                bassFilter.frequency.value = 60;  // Bass (60 Hz)
-                bassFilter.gain.value = bassSlider.value;
-                bassFilter.Q.value = 0.5; // Smoother transition
-
-                trebleFilter = audioContext.createBiquadFilter();
-                trebleFilter.type = "highshelf";
-                trebleFilter.frequency.value = 10000;  // Treble (10 kHz)
-                trebleFilter.gain.value = trebleSlider.value;
-                trebleFilter.Q.value = 0.5; // Smoother transition
-
-                // Create a GainNode to control output level and prevent clipping
-                gainNode = audioContext.createGain();
-                gainNode.gain.value = 0.8; // Adjust to prevent clipping (80% volume)
-
-                // Connect the nodes in series: mic -> bass -> treble -> gain -> output
-                micInput
-                    .connect(bassFilter)
-                    .connect(trebleFilter)
-                    .connect(gainNode)
-                    .connect(audioContext.destination);
-
-                status.textContent = "Virtual input is playing with the equalizer in real-time.";
-                startBtn.disabled = true;
-                stopBtn.disabled = false;
-            } catch (err) {
-                console.error('Error accessing virtual microphone:', err);
-                status.textContent = "Error accessing the virtual microphone.";
-            }
+          playbackStatus.textContent = 'Microphone is playing...';
+          isPlaying = true;
+        })
+        .catch(function(err) {
+          console.error('Error accessing microphone:', err);
+          playbackStatus.textContent = 'Error accessing microphone.';
         });
+    }
 
-        stopBtn.addEventListener('click', () => {
-            // Stop virtual microphone playback
-            if (micInput) {
-                micInput.disconnect();
-                audioContext.close();
-                stream.getTracks().forEach(track => track.stop()); // Stop all media tracks
-            }
+    // Function to stop microphone playback
+    function stopMicrophonePlayback() {
+      if (sourceNode) {
+        sourceNode.disconnect();
+        microphoneStream.getTracks().forEach(track => track.stop());
+        audioContext.close();
 
-            status.textContent = "Playback stopped.";
-            startBtn.disabled = false;
-            stopBtn.disabled = true;
-        });
-    </script>
+        playbackStatus.textContent = 'Microphone playback stopped.';
+        isPlaying = false;
+      }
+    }
+
+    // Toggle microphone playback when the button is clicked
+    playbackButton.addEventListener('click', function() {
+      if (isPlaying) {
+        stopMicrophonePlayback();
+        playbackButton.textContent = 'Start Microphone Playback';
+      } else {
+        startMicrophonePlayback();
+        playbackButton.textContent = 'Stop Microphone Playback';
+      }
+    });
+  </script>
+
 </body>
 </html>
