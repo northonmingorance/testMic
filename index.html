@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Microphone Enumerator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background-color: #f5f5f5;
+    }
+    h1 {
+      font-size: 24px;
+      color: #333;
+    }
+    ul {
+      list-style-type: none;
+      padding: 0;
+    }
+    li {
+      padding: 8px;
+      background-color: #eee;
+      margin: 4px 0;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Available Microphones</h1>
+  <ul id="microphone-list">
+    <!-- Microphone list will be populated here -->
+  </ul>
+
+  <button id="refresh-button">Refresh Microphone List</button>
+
+  <script>
+    function enumerateMicrophones() {
+      navigator.mediaDevices.enumerateDevices()
+        .then(function(devices) {
+          const audioInputDevices = devices.filter(device => device.kind === 'audioinput');
+          const microphoneList = document.getElementById('microphone-list');
+          microphoneList.innerHTML = ''; // Clear the list
+
+          if (audioInputDevices.length > 0) {
+            audioInputDevices.forEach((device, index) => {
+              const listItem = document.createElement('li');
+              listItem.textContent = `${index + 1}: ${device.label || 'Unnamed Microphone'} (ID: ${device.deviceId || 'No ID'})`;
+              microphoneList.appendChild(listItem);
+            });
+          } else {
+            const noMicrophones = document.createElement('li');
+            noMicrophones.textContent = 'No microphones found.';
+            microphoneList.appendChild(noMicrophones);
+          }
+        })
+        .catch(function(err) {
+          console.error('Error enumerating devices:', err);
+        });
+    }
+
+    // Request access to the microphone and enumerate devices
+    function requestMicrophoneAccess() {
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(function(stream) {
+          // After permission is granted, enumerate devices
+          enumerateMicrophones();
+        })
+        .catch(function(err) {
+          console.error('Error accessing microphone:', err);
+        });
+    }
+
+    // Add an event listener to refresh the list
+    document.getElementById('refresh-button').addEventListener('click', function() {
+      enumerateMicrophones();
+    });
+
+    // Request access and enumerate on page load
+    requestMicrophoneAccess();
+  </script>
+
+</body>
+</html>
