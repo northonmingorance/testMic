@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Microphone with Graphic Equalizer</title>
+    <title>Equalizer for Virtual Microphone</title>
     <style>
         .slider {
             width: 300px;
@@ -11,12 +11,8 @@
     </style>
 </head>
 <body>
-    <h1>Microphone Playback with Graphic Equalizer</h1>
-
-    <!-- Dropdown for selecting microphone -->
-    <label for="microphoneSelect">Choose a Microphone: </label>
-    <select id="microphoneSelect"></select>
-
+    <h1>Spotify Virtual Input with Equalizer</h1>
+    
     <!-- Sliders for EQ -->
     <div>
         <label for="bass">Bass (60 Hz): </label>
@@ -32,13 +28,12 @@
 
     <button id="startBtn">Start</button>
     <button id="stopBtn" disabled>Stop</button>
-    <p id="status">Click "Start" to play your microphone audio with the equalizer in real-time.</p>
+    <p id="status">Click "Start" to play your virtual input audio with the equalizer in real-time.</p>
 
     <script>
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
         const status = document.getElementById('status');
-        const microphoneSelect = document.getElementById('microphoneSelect');
 
         // Equalizer sliders and value spans
         const bassSlider = document.getElementById('bass');
@@ -49,36 +44,7 @@
         let audioContext;
         let micInput;
         let stream;
-        let bassFilter, trebleFilter;
-
-        // Function to enumerate microphones
-        async function enumerateMicrophones() {
-            try {
-                const devices = await navigator.mediaDevices.enumerateDevices();
-                const audioInputDevices = devices.filter(device => device.kind === 'audioinput');
-
-                // Populate microphone select dropdown
-                audioInputDevices.forEach((device, index) => {
-                    const option = document.createElement('option');
-                    option.value = device.deviceId;
-                    option.textContent = device.label || `Microphone ${index + 1}`;
-                    microphoneSelect.appendChild(option);
-                });
-
-                if (audioInputDevices.length === 0) {
-                    const noMicOption = document.createElement('option');
-                    noMicOption.textContent = 'No microphones found';
-                    microphoneSelect.appendChild(noMicOption);
-                    microphoneSelect.disabled = true;
-                }
-            } catch (err) {
-                console.error('Error enumerating devices:', err);
-                status.textContent = 'Error enumerating devices.';
-            }
-        }
-
-        // Call the function to populate the microphone list when the page loads
-        enumerateMicrophones();
+        let bassFilter, trebleFilter, gainNode;
 
         // Update displayed values for sliders
         bassSlider.oninput = () => {
@@ -93,50 +59,53 @@
 
         startBtn.addEventListener('click', async () => {
             try {
-                // Get selected microphone device ID
-                const selectedMicId = microphoneSelect.value;
+                // Request microphone (virtual input in this case) access
+                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-                // Request microphone access
-                stream = await navigator.mediaDevices.getUserMedia({
-                    audio: {
-                        deviceId: selectedMicId ? { exact: selectedMicId } : undefined
-                    }
+                // Create an audio context with increased buffer size and matching sample rate
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                    latencyHint: 'playback', // Use 'playback' for more buffer and smoother output
+                    sampleRate: 44100 // Match standard sample rate for audio (44.1kHz)
                 });
 
-                // Create an audio context
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-
-                // Create a media stream source from the microphone input
+                // Create a media stream source from the virtual microphone input
                 micInput = audioContext.createMediaStreamSource(stream);
 
-                // Create BiquadFilterNodes for bass and treble
+                // Create BiquadFilterNodes for bass and treble with lower Q for smoother adjustments
                 bassFilter = audioContext.createBiquadFilter();
                 bassFilter.type = "lowshelf";
                 bassFilter.frequency.value = 60;  // Bass (60 Hz)
                 bassFilter.gain.value = bassSlider.value;
+                bassFilter.Q.value = 0.5; // Smoother transition
 
                 trebleFilter = audioContext.createBiquadFilter();
                 trebleFilter.type = "highshelf";
                 trebleFilter.frequency.value = 10000;  // Treble (10 kHz)
                 trebleFilter.gain.value = trebleSlider.value;
+                trebleFilter.Q.value = 0.5; // Smoother transition
 
-                // Connect the nodes in series: mic -> bass -> treble -> output
+                // Create a GainNode to control output level and prevent clipping
+                gainNode = audioContext.createGain();
+                gainNode.gain.value = 0.8; // Adjust to prevent clipping (80% volume)
+
+                // Connect the nodes in series: mic -> bass -> treble -> gain -> output
                 micInput
                     .connect(bassFilter)
                     .connect(trebleFilter)
+                    .connect(gainNode)
                     .connect(audioContext.destination);
 
-                status.textContent = "Microphone is playing with the equalizer in real-time.";
+                status.textContent = "Virtual input is playing with the equalizer in real-time.";
                 startBtn.disabled = true;
                 stopBtn.disabled = false;
             } catch (err) {
-                console.error('Error accessing microphone:', err);
-                status.textContent = "Error accessing the microphone.";
+                console.error('Error accessing virtual microphone:', err);
+                status.textContent = "Error accessing the virtual microphone.";
             }
         });
 
         stopBtn.addEventListener('click', () => {
-            // Stop microphone playback
+            // Stop virtual microphone playback
             if (micInput) {
                 micInput.disconnect();
                 audioContext.close();
@@ -148,6 +117,5 @@
             stopBtn.disabled = true;
         });
     </script>
-
 </body>
 </html>
