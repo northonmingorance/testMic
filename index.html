@@ -1,59 +1,153 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Microphone Enumerator</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 20px;
-      background-color: #f5f5f5;
-    }
-    h1 {
-      font-size: 24px;
-      color: #333;
-    }
-    ul {
-      list-style-type: none;
-      padding: 0;
-    }
-    li {
-      padding: 8px;
-      background-color: #eee;
-      margin: 4px 0;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Microphone with Graphic Equalizer</title>
+    <style>
+        .slider {
+            width: 300px;
+        }
+    </style>
 </head>
 <body>
+    <h1>Microphone Playback with Graphic Equalizer</h1>
 
-  <h1>Available Microphones</h1>
-  <ul id="microphone-list">
-    <!-- Microphone list will be populated here -->
-  </ul>
+    <!-- Dropdown for selecting microphone -->
+    <label for="microphoneSelect">Choose a Microphone: </label>
+    <select id="microphoneSelect"></select>
 
-  <script>
-    navigator.mediaDevices.enumerateDevices()
-      .then(function(devices) {
-        const audioInputDevices = devices.filter(device => device.kind === 'audioinput');
-        const microphoneList = document.getElementById('microphone-list');
+    <!-- Sliders for EQ -->
+    <div>
+        <label for="bass">Bass (60 Hz): </label>
+        <input type="range" id="bass" class="slider" min="-30" max="30" value="0">
+        <span id="bassValue">0</span> dB
+    </div>
 
-        if (audioInputDevices.length > 0) {
-          audioInputDevices.forEach((device, index) => {
-            const listItem = document.createElement('li');
-            listItem.textContent = `${index + 1}: ${device.label || 'Unnamed Microphone'} (ID: ${device.deviceId})`;
-            microphoneList.appendChild(listItem);
-          });
-        } else {
-          const noMicrophones = document.createElement('li');
-          noMicrophones.textContent = 'No microphones found.';
-          microphoneList.appendChild(noMicrophones);
+    <div>
+        <label for="treble">Treble (10 kHz): </label>
+        <input type="range" id="treble" class="slider" min="-30" max="30" value="0">
+        <span id="trebleValue">0</span> dB
+    </div>
+
+    <button id="startBtn">Start</button>
+    <button id="stopBtn" disabled>Stop</button>
+    <p id="status">Click "Start" to play your microphone audio with the equalizer in real-time.</p>
+
+    <script>
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const status = document.getElementById('status');
+        const microphoneSelect = document.getElementById('microphoneSelect');
+
+        // Equalizer sliders and value spans
+        const bassSlider = document.getElementById('bass');
+        const trebleSlider = document.getElementById('treble');
+        const bassValue = document.getElementById('bassValue');
+        const trebleValue = document.getElementById('trebleValue');
+
+        let audioContext;
+        let micInput;
+        let stream;
+        let bassFilter, trebleFilter;
+
+        // Function to enumerate microphones
+        async function enumerateMicrophones() {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const audioInputDevices = devices.filter(device => device.kind === 'audioinput');
+
+                // Populate microphone select dropdown
+                audioInputDevices.forEach((device, index) => {
+                    const option = document.createElement('option');
+                    option.value = device.deviceId;
+                    option.textContent = device.label || `Microphone ${index + 1}`;
+                    microphoneSelect.appendChild(option);
+                });
+
+                if (audioInputDevices.length === 0) {
+                    const noMicOption = document.createElement('option');
+                    noMicOption.textContent = 'No microphones found';
+                    microphoneSelect.appendChild(noMicOption);
+                    microphoneSelect.disabled = true;
+                }
+            } catch (err) {
+                console.error('Error enumerating devices:', err);
+                status.textContent = 'Error enumerating devices.';
+            }
         }
-      })
-      .catch(function(err) {
-        console.error('Error enumerating devices:', err);
-      });
-  </script>
+
+        // Call the function to populate the microphone list when the page loads
+        enumerateMicrophones();
+
+        // Update displayed values for sliders
+        bassSlider.oninput = () => {
+            bassValue.textContent = bassSlider.value;
+            if (bassFilter) bassFilter.gain.value = bassSlider.value;
+        };
+
+        trebleSlider.oninput = () => {
+            trebleValue.textContent = trebleSlider.value;
+            if (trebleFilter) trebleFilter.gain.value = trebleSlider.value;
+        };
+
+        startBtn.addEventListener('click', async () => {
+            try {
+                // Get selected microphone device ID
+                const selectedMicId = microphoneSelect.value;
+
+                // Request microphone access
+                stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        deviceId: selectedMicId ? { exact: selectedMicId } : undefined
+                    }
+                });
+
+                // Create an audio context
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+                // Create a media stream source from the microphone input
+                micInput = audioContext.createMediaStreamSource(stream);
+
+                // Create BiquadFilterNodes for bass and treble
+                bassFilter = audioContext.createBiquadFilter();
+                bassFilter.type = "lowshelf";
+                bassFilter.frequency.value = 60;  // Bass (60 Hz)
+                bassFilter.gain.value = bassSlider.value;
+
+                trebleFilter = audioContext.createBiquadFilter();
+                trebleFilter.type = "highshelf";
+                trebleFilter.frequency.value = 10000;  // Treble (10 kHz)
+                trebleFilter.gain.value = trebleSlider.value;
+
+                // Connect the nodes in series: mic -> bass -> treble -> output
+                micInput
+                    .connect(bassFilter)
+                    .connect(trebleFilter)
+                    .connect(audioContext.destination);
+
+                status.textContent = "Microphone is playing with the equalizer in real-time.";
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+            } catch (err) {
+                console.error('Error accessing microphone:', err);
+                status.textContent = "Error accessing the microphone.";
+            }
+        });
+
+        stopBtn.addEventListener('click', () => {
+            // Stop microphone playback
+            if (micInput) {
+                micInput.disconnect();
+                audioContext.close();
+                stream.getTracks().forEach(track => track.stop()); // Stop all media tracks
+            }
+
+            status.textContent = "Playback stopped.";
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        });
+    </script>
 
 </body>
 </html>
