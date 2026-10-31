@@ -1808,6 +1808,106 @@
       return scored.slice(0, maxCandidates).map(x => x.track);
     }
 
+    // Resilient JSON parser & truncated stream salvage engine (`parseOrSalvageCuratorJSON`)
+    // Recovers 100% of complete track picks even if an LLM hits its output token ceiling mid-string
+    function parseOrSalvageCuratorJSON(rawText) {
+      if (!rawText || typeof rawText !== 'string') {
+        throw new Error('Empty LLM response body');
+      }
+
+      const cleaned = rawText
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/```\s*$/i, '')
+        .trim();
+
+      // 1. Try standard JSON.parse first
+      try {
+        const parsed = JSON.parse(cleaned);
+        return {
+          title: parsed.title || parsed.playlistTitle || '',
+          subtitle: parsed.subtitle || '',
+          linerNotes: parsed.linerNotes || parsed.vibeDescription || '',
+          vibeTags: Array.isArray(parsed.vibeTags) ? parsed.vibeTags : [],
+          picks: Array.isArray(parsed.picks)
+            ? parsed.picks
+            : (Array.isArray(parsed.selectedTracks) ? parsed.selectedTracks : (Array.isArray(parsed.selections) ? parsed.selections : [])),
+          salvaged: false
+        };
+      } catch (parseErr) {
+        // 2. Salvage truncated JSON ("Unterminated string in JSON" / "Unexpected end of JSON input")
+        const extractStringField = (fieldNames) => {
+          for (const name of fieldNames) {
+            const re = new RegExp(`"${name}"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"`, 'i');
+            const m = cleaned.match(re);
+            if (m && m[1]) {
+              return m[1].replace(/\\"/g, '"').replace(/\\n/g, ' ').trim();
+            }
+          }
+          return '';
+        };
+
+        const title = extractStringField(['title', 'playlistTitle']);
+        const subtitle = extractStringField(['subtitle']);
+        const linerNotes = extractStringField(['linerNotes', 'vibeDescription']);
+
+        const vibeTags = [];
+        const tagsBlockMatch = cleaned.match(/"vibeTags"\s*:\s*\[([^\]]*)/i);
+        if (tagsBlockMatch && tagsBlockMatch[1]) {
+          const tagRegex = /"((?:\\.|[^"\\])+)"/g;
+          let tm;
+          while ((tm = tagRegex.exec(tagsBlockMatch[1])) !== null) {
+            vibeTags.push(tm[1]);
+          }
+        }
+
+        const picks = [];
+        // Match compact integer-indexed objects: {"i": 12, "r": "Warm 70s Fender Rhodes groove"}
+        const compactObjRegex = /\{\s*"i"\s*:\s*(\d+)\s*,\s*"r"\s*:\s*"((?:\\.|[^"\\])*)"\s*\}/g;
+        let cm;
+        while ((cm = compactObjRegex.exec(cleaned)) !== null) {
+          picks.push({
+            i: parseInt(cm[1], 10),
+            r: cm[2].replace(/\\"/g, "'").trim()
+          });
+        }
+
+        // Also match reversed key order {"r": "...", "i": 12}
+        const compactRevRegex = /\{\s*"r"\s*:\s*"((?:\\.|[^"\\])*)"\s*,\s*"i"\s*:\s*(\d+)\s*\}/g;
+        while ((cm = compactRevRegex.exec(cleaned)) !== null) {
+          picks.push({
+            i: parseInt(cm[2], 10),
+            r: cm[1].replace(/\\"/g, "'").trim()
+          });
+        }
+
+        // Backward-compatibility salvage for {"id": "...", "reason": "..."}
+        const legacyObjRegex = /\{\s*"id"\s*:\s*"((?:\\.|[^"\\])+)"\s*,\s*"(?:reason|r)"\s*:\s*"((?:\\.|[^"\\])*)"\s*\}/g;
+        while ((cm = legacyObjRegex.exec(cleaned)) !== null) {
+          picks.push({
+            id: cm[1].trim(),
+            reason: cm[2].replace(/\\"/g, "'").trim()
+          });
+        }
+
+        if (picks.length > 0 || title) {
+          logTelemetry(
+            `[JSON SALVAGE] Recovered ${picks.length} complete AI track picks from truncated JSON stream (${parseErr.message}).`,
+            'amber'
+          );
+          return {
+            title,
+            subtitle,
+            linerNotes,
+            vibeTags,
+            picks,
+            salvaged: true
+          };
+        }
+
+        throw parseErr;
+      }
+    }
+
     async function runAICuration(appendMode = false) {
       playSwitchClick(640, 'square');
       const promptText = document.getElementById('vibePromptInput').value.trim();
@@ -1864,7 +1964,7 @@
         let generatedTitle = '';
         let generatedDesc = '';
 
-        // Batch requests in chunks of up to 50 tracks per LLM call so 150-song JSON never truncates
+        // Batch requests in chunks of up to 50 tracks per LLM call with integer index mapping (`i`) so output JSON stays ultra-compact
         const BATCH_SIZE = 50;
         const totalBatches = Math.ceil(targetCount / BATCH_SIZE);
         const pickedInRun = new Set();
@@ -1878,22 +1978,28 @@
             ? `CURATING BATCH ${b + 1}/${totalBatches} (${accumulatedTracks.length}/${targetCount})...`
             : `CURATING ${targetCount} TRACKS...`;
 
-          const batchPool = shortlistedPool.filter(t => !pickedInRun.has(t.id)).slice(0, 400);
+          const batchPool = shortlistedPool.filter(t => !pickedInRun.has(t.id)).slice(0, 350);
           if (batchPool.length === 0) break;
 
-          // Token-efficient compact catalog format: ID|Title - Artist (Year) [Tags]
-          const compactIndex = batchPool.map(t => (
-            `${t.id}|${t.title} - ${t.artist} (${t.year})${t.tags ? ' [' + t.tags + ']' : ''}`
-          )).join('\n');
+          // Ultra-compact integer-indexed catalog format: i|Title|Artist|Year|Vibe
+          const compactIndex = batchPool.map((t, idx) => {
+            const cleanTitle = String(t.title || '').replace(/[|"]/g, ' ').slice(0, 48);
+            const cleanArtist = String(t.artist || '').replace(/[|"]/g, ' ').slice(0, 36);
+            const cleanTags = t.tags ? String(t.tags).replace(/[|"]/g, ' ').slice(0, 38) : '';
+            return `${idx}|${cleanTitle}|${cleanArtist}|${t.year || 1975}${cleanTags ? '|' + cleanTags : ''}`;
+          }).join('\n');
 
           const systemInstruction = `You are LIKED // SELECTOR, an elite musicologist and vinyl crate digger.
-Select strictly ${batchTarget} tracks from the provided LIKED SONGS CRATE that match the user's vibe prompt and style: "${curationStyle}".
-Return ONLY valid track IDs from the list. Keep each "reason" concise (under 14 words) explaining why it fits.`;
+Select strictly ${batchTarget} tracks from the provided candidate catalog that match the user's vibe prompt and curation mode: "${curationStyle}".
+CRITICAL COMPACT SCHEMA RULES:
+1. Reference each chosen track by its integer index "i" (0 to ${batchPool.length - 1}) from the candidate catalog.
+2. Keep "r" (reason why it fits) ultra-concise: maximum 8 words, plain text, NO double quotes inside strings.
+3. Return valid JSON with keys: "title", "subtitle", "linerNotes", "vibeTags", and "picks" (array of {"i": number, "r": string}).`;
 
           const userQuery = `USER VIBE PROMPT: "${promptText}"
 SELECT EXACTLY: ${batchTarget} tracks.
 
-AVAILABLE LIKED SONGS CRATE (Format: ID|Title - Artist (Year)):
+CANDIDATE CRATE CATALOG (Format: i|Title|Artist|Year|Vibe):
 ${compactIndex}`;
 
           const parsedResult = state.llmProvider === 'custom'
@@ -1901,17 +2007,27 @@ ${compactIndex}`;
             : await callBuiltInGemini(systemInstruction, userQuery);
 
           if (parsedResult) {
-            if (!generatedTitle && parsedResult.playlistTitle) generatedTitle = parsedResult.playlistTitle;
-            if (!generatedDesc && parsedResult.vibeDescription) generatedDesc = parsedResult.vibeDescription;
+            if (!generatedTitle && parsedResult.title) generatedTitle = parsedResult.title;
+            if (!generatedDesc && (parsedResult.linerNotes || parsedResult.subtitle)) {
+              generatedDesc = parsedResult.linerNotes || parsedResult.subtitle;
+            }
 
-            if (Array.isArray(parsedResult.selectedTracks)) {
-              for (const item of parsedResult.selectedTracks) {
-                const found = trackMap.get(item.id);
+            if (Array.isArray(parsedResult.picks)) {
+              for (const item of parsedResult.picks) {
+                let found = null;
+                if (typeof item.i === 'number' && batchPool[item.i]) {
+                  found = batchPool[item.i];
+                } else if (item.i !== undefined && !isNaN(parseInt(item.i, 10)) && batchPool[parseInt(item.i, 10)]) {
+                  found = batchPool[parseInt(item.i, 10)];
+                } else if (item.id && trackMap.has(item.id)) {
+                  found = trackMap.get(item.id);
+                }
+
                 if (found && !pickedInRun.has(found.id)) {
                   pickedInRun.add(found.id);
                   accumulatedTracks.push({
                     ...found,
-                    reason: item.reason || 'Harmonic and era cohesion match.'
+                    reason: item.r || item.reason || 'Harmonic and era cohesion match.'
                   });
                 }
               }
@@ -1919,9 +2035,13 @@ ${compactIndex}`;
           }
         }
 
-        // If the LLM returned fewer tracks than requested (e.g. strict prompt on a 150-song request), top up seamlessly with deterministic local scoring
+        // If the LLM or salvaged JSON returned fewer tracks than requested (e.g. 128 of 150), top up seamlessly with deterministic local scoring
         if (accumulatedTracks.length < targetCount) {
           const shortfall = targetCount - accumulatedTracks.length;
+          logTelemetry(
+            `[AI TOP-UP] Filling remaining ${shortfall} slot(s) via deterministic crate scorer to complete ${targetCount}-track master tape...`,
+            'amber'
+          );
           const topUp = getLocalScoredTracks(
             availablePool.filter(t => !pickedInRun.has(t.id)),
             promptText,
@@ -1974,32 +2094,45 @@ ${compactIndex}`;
       const modelName = state.geminiModel || 'gemini-2.5-flash';
       const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(resolvedKey)}`;
 
+      // Disable thinking budget on Flash models so thinking tokens never eat into the 8,192 output token ceiling
+      const generationConfig = {
+        maxOutputTokens: 8192,
+        temperature: 0.35,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "OBJECT",
+          properties: {
+            title: { type: "STRING" },
+            subtitle: { type: "STRING" },
+            linerNotes: { type: "STRING" },
+            vibeTags: {
+              type: "ARRAY",
+              items: { type: "STRING" }
+            },
+            picks: {
+              type: "ARRAY",
+              items: {
+                type: "OBJECT",
+                properties: {
+                  i: { type: "INTEGER" },
+                  r: { type: "STRING" }
+                },
+                propertyOrdering: ["i", "r"]
+              }
+            }
+          },
+          propertyOrdering: ["title", "subtitle", "linerNotes", "vibeTags", "picks"]
+        }
+      };
+
+      if (modelName.includes('2.5-flash') || modelName.includes('3-flash')) {
+        generationConfig.thinkingConfig = { thinkingBudget: 0 };
+      }
+
       const payload = {
         contents: [{ role: 'user', parts: [{ text: userQuery }] }],
         systemInstruction: { parts: [{ text: systemInstruction }] },
-        generationConfig: {
-          maxOutputTokens: 8192,
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: "OBJECT",
-            properties: {
-              playlistTitle: { type: "STRING" },
-              vibeDescription: { type: "STRING" },
-              selectedTracks: {
-                type: "ARRAY",
-                items: {
-                  type: "OBJECT",
-                  properties: {
-                    id: { type: "STRING" },
-                    reason: { type: "STRING" }
-                  },
-                  propertyOrdering: ["id", "reason"]
-                }
-              }
-            },
-            propertyOrdering: ["playlistTitle", "vibeDescription", "selectedTracks"]
-          }
-        }
+        generationConfig
       };
 
       const response = await fetchWithRetry(apiUrl, {
@@ -2013,9 +2146,11 @@ ${compactIndex}`;
       }
 
       const result = await response.json();
-      const rawJson = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+      const parts = result?.candidates?.[0]?.content?.parts || [];
+      const textPart = parts.find(p => typeof p.text === 'string' && !p.thought) || parts[0];
+      const rawJson = textPart?.text;
       if (!rawJson) throw new Error('Empty Gemini candidate payload');
-      return JSON.parse(rawJson);
+      return parseOrSalvageCuratorJSON(rawJson);
     }
 
     // Support both Ollama native (/api/chat) and OpenAI-compatible (/v1/chat/completions) endpoints
@@ -2024,7 +2159,7 @@ ${compactIndex}`;
       const model = (document.getElementById('customLlmModelInput')?.value || state.customLlmModel || 'gemma3:12b').trim();
       const apiKey = (document.getElementById('customLlmKeyInput')?.value || state.customLlmKey || '').trim();
 
-      const jsonInstruction = `${systemInstruction}\nRespond ONLY with valid JSON matching this schema: {"playlistTitle":"string","vibeDescription":"string","selectedTracks":[{"id":"string","reason":"string"}]}`;
+      const jsonInstruction = `${systemInstruction}\nRespond ONLY with valid JSON matching this ultra-compact schema: {"title":"string","subtitle":"string","linerNotes":"string","vibeTags":["string"],"picks":[{"i":0,"r":"max 8 words no quotes"}]}`;
 
       const headers = { 'Content-Type': 'application/json' };
       if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
@@ -2035,6 +2170,10 @@ ${compactIndex}`;
             model,
             stream: false,
             format: 'json',
+            options: {
+              num_predict: 8192,
+              temperature: 0.35
+            },
             messages: [
               { role: 'system', content: jsonInstruction },
               { role: 'user', content: userQuery }
@@ -2042,6 +2181,8 @@ ${compactIndex}`;
           }
         : {
             model,
+            max_tokens: 8192,
+            temperature: 0.35,
             response_format: { type: 'json_object' },
             messages: [
               { role: 'system', content: jsonInstruction },
@@ -2065,8 +2206,7 @@ ${compactIndex}`;
         : data?.choices?.[0]?.message?.content;
 
       if (!content) throw new Error('Empty response from Local LLM');
-      const cleaned = content.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
-      return JSON.parse(cleaned);
+      return parseOrSalvageCuratorJSON(content);
     }
 
     // Reusable deterministic local scorer supporting up to 150 tracks across 6,000-track crates
