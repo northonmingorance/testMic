@@ -789,51 +789,98 @@
         <div class="p-3.5 rounded bg-recessed border border-neutral-800 space-y-3">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <button id="engineGeminiBtn" onclick="setLlmProvider('gemini')" class="p-2.5 rounded border text-left font-mono text-xs transition-all border-amber bg-amber/10 text-amber">
-              <div class="font-bold">⚡ BUILT-IN GEMINI 3 FLASH</div>
-              <div class="text-[10px] text-neutral-400 mt-0.5">Zero-config structured JSON curation</div>
+              <div class="font-bold">⚡ GOOGLE GEMINI API</div>
+              <div class="text-[10px] text-neutral-400 mt-0.5">Structured JSON curation (Cloud API Key or Env)</div>
             </button>
             <button id="engineCustomBtn" onclick="setLlmProvider('custom')" class="p-2.5 rounded border text-left font-mono text-xs transition-all border-neutral-800 bg-panel text-neutral-400">
-              <div class="font-bold">🖥️ LOCAL LLM / CUSTOM ENDPOINT</div>
-              <div class="text-[10px] text-neutral-400 mt-0.5">Ollama, LM Studio, or OpenAI compatible</div>
+              <div class="font-bold">🖥️ LOCAL LLM (OLLAMA / OPENAI)</div>
+              <div class="text-[10px] text-neutral-400 mt-0.5">Zero-cloud local inference (gemma3, qwen2.5, llama)</div>
             </button>
           </div>
 
-          <div id="customLlmConfigBox" class="hidden space-y-2 pt-2 border-t border-neutral-800">
-            <div>
-              <label class="font-mono text-[10px] text-neutral-400 block">OPENAI / OLLAMA COMPATIBLE CHAT COMPLETIONS URL</label>
-              <input 
-                id="customLlmUrlInput" 
-                type="text" 
-                value="http://localhost:11434/v1/chat/completions"
-                class="w-full bg-panel border border-neutral-700 rounded px-2.5 py-1.5 font-mono text-xs text-neutral-100"
-              />
+          <!-- GEMINI API KEY & MODEL CONFIG (Fixes 403 ?key= when running locally) -->
+          <div id="geminiLlmConfigBox" class="space-y-2.5 pt-2 border-t border-neutral-800">
+            <div class="flex items-center justify-between">
+              <label class="font-mono text-[10px] text-neutral-300 uppercase">
+                GEMINI API KEY (SAVED IN LOCALSTORAGE · FIXES HTTP 403 WHEN RUNNING LOCALLY)
+              </label>
+              <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" class="font-mono text-[10px] text-amber underline hover:text-white">
+                Get Free Key ↗
+              </a>
             </div>
-            <div class="grid grid-cols-2 gap-2">
-              <div>
-                <label class="font-mono text-[10px] text-neutral-400 block">MODEL NAME</label>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div class="sm:col-span-2 flex gap-1.5">
                 <input 
-                  id="customLlmModelInput" 
-                  type="text" 
-                  value="llama3.1:8b"
-                  class="w-full bg-panel border border-neutral-700 rounded px-2.5 py-1.5 font-mono text-xs text-neutral-100"
-                />
-              </div>
-              <div>
-                <label class="font-mono text-[10px] text-neutral-400 block">OPTIONAL API KEY</label>
-                <input 
-                  id="customLlmKeyInput" 
+                  id="geminiApiKeyInput" 
                   type="password" 
-                  placeholder="Optional Bearer Key"
-                  class="w-full bg-panel border border-neutral-700 rounded px-2.5 py-1.5 font-mono text-xs text-neutral-100"
+                  placeholder="AIzaSy... (Leave blank only if using hosted Canvas preview)"
+                  class="flex-1 bg-panel border border-neutral-700 rounded px-2.5 py-1.5 font-mono text-xs text-neutral-100 focus:outline-none focus:border-amber"
+                />
+                <button onclick="saveAiEngineConfig()" class="tactile-btn-amber px-3 py-1.5 rounded font-mono text-[10px] uppercase shrink-0">
+                  SAVE KEY
+                </button>
+              </div>
+              <div>
+                <select id="geminiModelSelect" onchange="saveAiEngineConfig()" class="w-full bg-panel border border-neutral-700 rounded px-2.5 py-1.5 font-mono text-xs text-amber focus:outline-none">
+                  <option value="gemini-2.5-flash">gemini-2.5-flash (Recommended)</option>
+                  <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
+                  <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+                </select>
+              </div>
+            </div>
+            <p class="font-mono text-[10px] text-neutral-400 leading-relaxed">
+              Status: <span id="geminiKeyStatusText" class="text-amber">Checking key...</span> — If you don't want to use a cloud key, switch to <strong>LOCAL LLM (OLLAMA)</strong> above or click <strong>⚡ INSTANT LOCAL MATCH</strong> on the deck.
+            </p>
+          </div>
+
+          <!-- LOCAL LLM (OLLAMA / OPENAI) CONFIG -->
+          <div id="customLlmConfigBox" class="hidden space-y-2.5 pt-2 border-t border-neutral-800">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>
+                <label class="font-mono text-[10px] text-neutral-400 block mb-1">ENDPOINT URL (/v1/chat/completions OR /api/chat)</label>
+                <input 
+                  id="customLlmUrlInput" 
+                  type="text" 
+                  onchange="saveAiEngineConfig()"
+                  value="http://localhost:11434/v1/chat/completions"
+                  class="w-full bg-panel border border-neutral-700 rounded px-2.5 py-1.5 font-mono text-xs text-neutral-100 focus:outline-none focus:border-amber"
                 />
               </div>
+              <div>
+                <label class="font-mono text-[10px] text-neutral-400 block mb-1">QUICK MODEL PRESET OR CUSTOM NAME</label>
+                <div class="flex gap-1.5">
+                  <select id="ollamaPresetSelect" onchange="document.getElementById('customLlmModelInput').value = this.value; saveAiEngineConfig();" class="bg-panel border border-neutral-700 rounded px-2 py-1.5 font-mono text-xs text-amber">
+                    <option value="gemma3:12b">gemma3:12b</option>
+                    <option value="qwen2.5:14b">qwen2.5:14b</option>
+                    <option value="llama3.1:8b">llama3.1:8b</option>
+                    <option value="mistral:7b">mistral:7b</option>
+                  </select>
+                  <input 
+                    id="customLlmModelInput" 
+                    type="text" 
+                    onchange="saveAiEngineConfig()"
+                    value="gemma3:12b"
+                    class="flex-1 bg-panel border border-neutral-700 rounded px-2.5 py-1.5 font-mono text-xs text-neutral-100"
+                  />
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <input 
+                id="customLlmKeyInput" 
+                type="password" 
+                onchange="saveAiEngineConfig()"
+                placeholder="Optional Bearer API Key (leave empty for local Ollama)"
+                class="flex-1 bg-panel border border-neutral-700 rounded px-2.5 py-1 font-mono text-xs text-neutral-100"
+              />
+              <span class="font-mono text-[10px] text-neutral-500">Tip: Run Ollama with <code class="text-amber">OLLAMA_ORIGINS=* ollama serve</code></span>
             </div>
           </div>
         </div>
       </div>
 
       <div class="flex justify-end gap-2 pt-2 border-t border-neutral-800">
-        <button onclick="closeSettingsModal()" class="tactile-btn-amber px-4 py-2 rounded font-mono text-xs uppercase">
+        <button onclick="saveAiEngineConfig(); closeSettingsModal();" class="tactile-btn-amber px-4 py-2 rounded font-mono text-xs uppercase">
           SAVE &amp; RETURN TO DECK
         </button>
       </div>
@@ -878,8 +925,99 @@
   <!-- APPLICATION JAVASCRIPT -->
   <script>
     // ============================================================================
+    // 1. DEFAULT 64-TRACK ECLECTIC DEMO CRATE & VIBE PRESETS
+    // ============================================================================
+    const VIBE_PRESETS = [
+      "Late night 1970s Buenos Aires rainy café — poetic Argentine Rock Nacional (Spinetta, Charly García, Invisible, Pescado Rabioso), acoustic 12-string guitars, warm Fender Rhodes, and nocturnal analog basslines",
+      "Sun-drenched 1970s Brazilian Tropicalia & Samba-Soul afternoon — Jorge Ben Jor, Novos Baianos, Tim Maia, Gilberto Gil, infectious acoustic percussion, warm horns, and joyful groove",
+      "Hypnotic 1970s Krautrock & Analog Synth Odyssey — motorik drums, vintage Moog & EMS VCS3 oscillators, cosmic tape delay, and nocturnal Berlin/Düsseldorf studio experiments",
+      "Midnight Smoky Spiritual Jazz & Lagos Afrobeat Lounge — tenor saxophones, polyrhythmic Fela Kuti horn sections, Miles Davis electric trumpet, and deep modal upright bass",
+      "Heavy 1970s Blues-Psych & Acid Rock Riffage — overdriven Gibson Les Pauls, Pappo's Blues, Manal, Led Zeppelin, Black Sabbath, and raw vintage tube amp grit"
+    ];
+
+    const DEFAULT_DEMO_CRATE = [
+      // Argentine Rock Nacional (60s/70s/80s)
+      { id: "4uLU6hMCjMI75M1A2tKUQC", title: "Muchacha (Ojos de Papel)", artist: "Almendra", album: "Almendra", year: 1969, durationSec: 184, tags: "argentina rock nacional spinetta acoustic poetic ballad 60s buenos aires" },
+      { id: "2b8fOow8UzyDFAE27YhOZM", title: "Rutas Argentinas", artist: "Almendra", album: "Almendra II", year: 1970, durationSec: 162, tags: "argentina rock nacional blues rock guitar riff 70s buenos aires" },
+      { id: "0VjIjW4GlUZAMYd2vXMi3b", title: "Bajan", artist: "Pescado Rabioso", album: "Artaud", year: 1973, durationSec: 206, tags: "argentina rock nacional spinetta acoustic electric poetic 70s buenos aires" },
+      { id: "7qiZfU4dY1lWllzX7mPBI3", title: "Cantata de Puentes Amarillos", artist: "Pescado Rabioso", album: "Artaud", year: 1973, durationSec: 556, tags: "argentina rock nacional spinetta folk prog acoustic suite 70s" },
+      { id: "6habFhsOp2NvshLv26DqMb", title: "Todas las Hojas Son del Viento", artist: "Pescado Rabioso", album: "Artaud", year: 1973, durationSec: 132, tags: "argentina rock nacional spinetta acoustic folk melancholic 70s" },
+      { id: "5ChkMS8OtdzJeqyybCc9R5", title: "Post-Crucifixión", artist: "Pescado Rabioso", album: "Desatormentándonos", year: 1972, durationSec: 235, tags: "argentina heavy psych blues rock organ riff 70s" },
+      { id: "3KkXRkHbMCARz0aVfEt68P", title: "El Anillo del Capitán Beto", artist: "Invisible", album: "El Jardín de los Presentes", year: 1976, durationSec: 312, tags: "argentina jazz rock prog spinetta fender rhodes buenos aires 70s" },
+      { id: "1r9xUipOqoNwggBpENDsvJ", title: "Los Libros de la Buena Memoria", artist: "Invisible", album: "El Jardín de los Presentes", year: 1976, durationSec: 310, tags: "argentina tango rock progbandoneon spinetta nocturnal rainy 70s" },
+      { id: "0e7ipj03S05BNilyu5bRzt", title: "Jugo de Tomate Frío", artist: "Manal", album: "Manal", year: 1970, durationSec: 168, tags: "argentina blues rock raw gritty buenos aires 70s" },
+      { id: "21jGcNKet2qwijlDFuPiPb", title: "Avellaneda Blues", artist: "Manal", album: "Manal", year: 1970, durationSec: 335, tags: "argentina smoky midnight blues piano bass rainy buenos aires 70s" },
+      { id: "6UelLqGlWMcVH1E5c4H7lY", title: "No Pibe", artist: "Manal", album: "Manal", year: 1970, durationSec: 215, tags: "argentina heavy blues groove 70s" },
+      { id: "3PfIrDoz19wz7qK7tYeu62", title: "Sucio y Desprolijo", artist: "Pappo's Blues", album: "Pappo's Blues Vol. 3", year: 1973, durationSec: 273, tags: "argentina heavy blues rock guitar solo riff 70s" },
+      { id: "5HCyWlXZPP0y6Gqq8TgA20", title: "Desconfío", artist: "Pappo's Blues", album: "Pappo's Blues Vol. 2", year: 1972, durationSec: 182, tags: "argentina slow blues ballad piano melancholic bar 70s" },
+      { id: "4iJyoBOLtHqaGxP12qzhQI", title: "Canción para Mi Muerte", artist: "Sui Generis", album: "Vida", year: 1972, durationSec: 220, tags: "argentina charly garcia folk rock acoustic flute 70s" },
+      { id: "1xQ6trAsedVPCdbtDAmk0c", title: "Rasguña las Piedras", artist: "Sui Generis", album: "Confesiones de Invierno", year: 1973, durationSec: 194, tags: "argentina charly garcia piano ballad rock nacional 70s" },
+      { id: "7ytR5pFWmSjzHJIeQkgog4", title: "Cinema Verité", artist: "Serú Girán", album: "Peperina", year: 1981, durationSec: 295, tags: "argentina charly garcia prog pop fender rhodes 80s buenos aires" },
+      { id: "463CkQjx2Zk1yXoBuierM9", title: "Seminare", artist: "Serú Girán", album: "Serú Girán", year: 1978, durationSec: 205, tags: "argentina charly garcia David Lebon prog ballad mellotron 70s" },
+      { id: "27NovPIUIRrOZoCHxABJwK", title: "La Grasa de las Capitales", artist: "Serú Girán", album: "La Grasa de las Capitales", year: 1979, durationSec: 267, tags: "argentina jazz fusion prog rock fretless bass 70s" },
+      { id: "6I3mqTwhRpn34SLVafSH7G", title: "Promesas Sobre el Bidet", artist: "Charly García", album: "Piano Bar", year: 1984, durationSec: 166, tags: "argentina charly garcia synth rock new wave piano 80s" },
+      { id: "3FAJ6O0NOHQV8Mc5Ri6ENp", title: "Nos Siguen Pegando Abajo", artist: "Charly García", album: "Clics Modernos", year: 1983, durationSec: 205, tags: "argentina synth funk dance rock 80s" },
+      { id: "0VjIjW4GlUZAMYd2vXMi3c", title: "Mañana en el Abasto", artist: "Sumo", album: "After Chabón", year: 1987, durationSec: 249, tags: "argentina post-punk dub nocturnal buenos aires 80s" },
+      { id: "1BxfuPKGuaTgP7aM0Bbdwr", title: "En la Ciudad de la Furia", artist: "Soda Stereo", album: "Doble Vida", year: 1988, durationSec: 345, tags: "argentina cerati post-punk alternative rock nocturnal buenos aires 80s" },
+      { id: "2K7xn816oNHJZ0aVqdQsha", title: "Bocanada", artist: "Gustavo Cerati", album: "Bocanada", year: 1999, durationSec: 247, tags: "argentina trip-hop downtempo smoky nocturnal electronic 90s" },
+
+      // Brazilian Tropicalia, Samba-Soul & MPB (60s/70s)
+      { id: "5vNRhkKd0yEAg8suGBpjeY", title: "O Telefone Tocou Novamente", artist: "Jorge Ben Jor", album: "Força Bruta", year: 1970, durationSec: 230, tags: "brazil samba soul acoustic guitar groove warm 70s" },
+      { id: "4Dvkj6JhhA12EX05fT7y2e", title: "Taj Mahal", artist: "Jorge Ben Jor", album: "Ben", year: 1972, durationSec: 188, tags: "brazil samba rock tropicalia sun groove 70s" },
+      { id: "6PQ88X9TkUIAUIZJHW2upE", title: "Ponta de Lança Africano (Umbabarauma)", artist: "Jorge Ben Jor", album: "África Brasil", year: 1976, durationSec: 236, tags: "brazil funk afrobeat electric samba 70s" },
+      { id: "1P17dC1amhFzptugyAO7Il", title: "Mistério do Planeta", artist: "Novos Baianos", album: "Acabou Chorare", year: 1972, durationSec: 216, tags: "brazil tropicalia samba rock acoustic sunny 70s" },
+      { id: "2takcwOaAZWiXQijPHIx7B", title: "Preta Pretinha", artist: "Novos Baianos", album: "Acabou Chorare", year: 1972, durationSec: 398, tags: "brazil acoustic folk samba warm 70s" },
+      { id: "3AJwUDP919kvQ9QcozQPxg", title: "Rational Culture", artist: "Tim Maia", album: "Racional Vol. 1", year: 1975, durationSec: 728, tags: "brazil funk soul groove horns 70s" },
+      { id: "0cGG2EouYCEEC3xfa0tDFV", title: "Gostava Tanto de Você", artist: "Tim Maia", album: "Tim Maia 1973", year: 1973, durationSec: 256, tags: "brazil soul funk warm 70s" },
+      { id: "5aAx2yezTd8zXrkmtKl66Z", title: "Tudo O Que Você Podia Ser", artist: "Milton Nascimento, Lô Borges", album: "Clube da Esquina", year: 1972, durationSec: 177, tags: "brazil mpb acoustic jazz folk poetic 70s" },
+      { id: "7KXjTSCq5nL1LoYtL7XAwS", title: "Cravo e Canela", artist: "Milton Nascimento, Lô Borges", album: "Clube da Esquina", year: 1972, durationSec: 152, tags: "brazil mpb sunny acoustic flute 70s" },
+      { id: "1301WleyT98MSxVHPZCA6M", title: "A Minha Menina", artist: "Os Mutantes", album: "Os Mutantes", year: 1968, durationSec: 282, tags: "brazil tropicalia psychedelic fuzz guitar 60s" },
+      { id: "4cOdK2wGLETKBW3PvgPWqT", title: "Back in Bahia", artist: "Gilberto Gil", album: "Expresso 2222", year: 1972, durationSec: 274, tags: "brazil tropicalia upbeat guitar groove 70s" },
+      { id: "2Fxmhks0bxGSBdJ92vM42m", title: "Águas de Março", artist: "Elis Regina, Antônio Carlos Jobim", album: "Elis & Tom", year: 1974, durationSec: 212, tags: "brazil bossa nova jazz piano rainy café 70s" },
+      { id: "6DCZcSspjsKoFjzjrWoCdn", title: "Construção", artist: "Chico Buarque", album: "Construção", year: 1971, durationSec: 384, tags: "brazil mpb orchestral poetic dramatic 70s" },
+
+      // Krautrock, Analog Synth & Electronic (70s/80s/90s)
+      { id: "0VjIjW4GlUZAMYd2vXMi4a", title: "Vitamin C", artist: "CAN", album: "Ege Bamyasi", year: 1972, durationSec: 214, tags: "krautrock motorik funk drums groove 70s" },
+      { id: "0VjIjW4GlUZAMYd2vXMi4b", title: "Future Days", artist: "CAN", album: "Future Days", year: 1973, durationSec: 570, tags: "krautrock ambient hypnotic analog warm 70s" },
+      { id: "0VjIjW4GlUZAMYd2vXMi4c", title: "Hallogallo", artist: "NEU!", album: "NEU!", year: 1972, durationSec: 607, tags: "krautrock motorik driving guitar synth 70s" },
+      { id: "0VjIjW4GlUZAMYd2vXMi4d", title: "Autobahn", artist: "Kraftwerk", album: "Autobahn", year: 1974, durationSec: 525, tags: "krautrock analog synth moog electronic driving 70s" },
+      { id: "0VjIjW4GlUZAMYd2vXMi4e", title: "Neon Lights", artist: "Kraftwerk", album: "The Man-Machine", year: 1978, durationSec: 534, tags: "analog synth nocturnal electronic warm 70s" },
+      { id: "0VjIjW4GlUZAMYd2vXMi4f", title: "Plantasia", artist: "Mort Garson", album: "Mother Earth's Plantasia", year: 1976, durationSec: 201, tags: "analog moog synth botanical warm sunny 70s" },
+      { id: "0VjIjW4GlUZAMYd2vXMi4g", title: "Phaedra", artist: "Tangerine Dream", album: "Phaedra", year: 1974, durationSec: 1056, tags: "berlin school analog sequencer synth cosmic 70s" },
+      { id: "0VjIjW4GlUZAMYd2vXMi4h", title: "La Femme d'Argent", artist: "Air", album: "Moon Safari", year: 1998, durationSec: 430, tags: "downtempo analog synth fender rhodes bassline nocturnal 90s" },
+      { id: "0VjIjW4GlUZAMYd2vXMi4i", title: "Roygbiv", artist: "Boards of Canada", album: "Music Has the Right to Children", year: 1998, durationSec: 149, tags: "analog synth tape nostalgia warm electronic 90s" },
+      { id: "0VjIjW4GlUZAMYd2vXMi4j", title: "Xtal", artist: "Aphex Twin", album: "Selected Ambient Works 85-92", year: 1992, durationSec: 294, tags: "ambient techno dreamy nocturnal electronic 90s" },
+
+      // Spiritual Jazz, Smoky Miles, Afrobeat & Funk (50s-70s)
+      { id: "0VjIjW4GlUZAMYd2vXMi5a", title: "Blue in Green", artist: "Miles Davis", album: "Kind of Blue", year: 1959, durationSec: 337, tags: "jazz smoky midnight rainy café piano trumpet bill evans 50s" },
+      { id: "0VjIjW4GlUZAMYd2vXMi5b", title: "In a Silent Way", artist: "Miles Davis", album: "In a Silent Way", year: 1969, durationSec: 1197, tags: "jazz fusion fender rhodes ambient nocturnal 60s" },
+      { id: "0VjIjW4GlUZAMYd2vXMi5c", title: "Naima", artist: "John Coltrane", album: "Giant Steps", year: 1960, durationSec: 261, tags: "jazz ballad saxophone smoky midnight 60s" },
+      { id: "0VjIjW4GlUZAMYd2vXMi5d", title: "The Creator Has a Master Plan", artist: "Pharoah Sanders", album: "Karma", year: 1969, durationSec: 560, tags: "spiritual jazz saxophone warm cosmic 60s" },
+      { id: "0VjIjW4GlUZAMYd2vXMi5e", title: "Chameleon", artist: "Herbie Hancock", album: "Head Hunters", year: 1973, durationSec: 941, tags: "jazz funk analog synth bassline clavinet 70s" },
+      { id: "0VjIjW4GlUZAMYd2vXMi5f", title: "Zombie", artist: "Fela Kuti", album: "Zombie", year: 1976, durationSec: 745, tags: "afrobeat horns polyrhythm groove lagos 70s" },
+      { id: "0VjIjW4GlUZAMYd2vXMi5g", title: "Water No Get Enemy", artist: "Fela Kuti", album: "Expensive Shit", year: 1975, durationSec: 590, tags: "afrobeat jazz horns warm groove 70s" },
+      { id: "0VjIjW4GlUZAMYd2vXMi5h", title: "Yègellé Tezeta", artist: "Mulatu Astatke", album: "Ethio Jazz", year: 1974, durationSec: 195, tags: "ethio jazz vibraphone horns smoky nocturnal 70s" },
+
+      // Classic Psych, Blues Rock & Art Rock (60s-2000s)
+      { id: "0VjIjW4GlUZAMYd2vXMi6a", title: "Since I've Been Loving You", artist: "Led Zeppelin", album: "Led Zeppelin III", year: 1970, durationSec: 444, tags: "heavy blues rock organ guitar solo smoky 70s" },
+      { id: "0VjIjW4GlUZAMYd2vXMi6b", title: "No Quarter", artist: "Led Zeppelin", album: "Houses of the Holy", year: 1973, durationSec: 420, tags: "psych blues rock fender rhodes nocturnal heavy riff 70s" },
+      { id: "0VjIjW4GlUZAMYd2vXMi6c", title: "Planet Caravan", artist: "Black Sabbath", album: "Paranoid", year: 1970, durationSec: 272, tags: "psych rock spacey bongos jazz guitar nocturnal 70s" },
+      { id: "0VjIjW4GlUZAMYd2vXMi6d", title: "Breathe (In the Air)", artist: "Pink Floyd", album: "The Dark Side of the Moon", year: 1973, durationSec: 169, tags: "prog psych rock slide guitar warm analog 70s" },
+      { id: "0VjIjW4GlUZAMYd2vXMi6e", title: "Riders on the Storm", artist: "The Doors", album: "L.A. Woman", year: 1971, durationSec: 434, tags: "rainy nocturnal fender rhodes blues rock 70s" },
+      { id: "0VjIjW4GlUZAMYd2vXMi6f", title: "Maggot Brain", artist: "Funkadelic", album: "Maggot Brain", year: 1971, durationSec: 620, tags: "acid rock psych guitar solo emotional 70s" },
+      { id: "0VjIjW4GlUZAMYd2vXMi6g", title: "Once in a Lifetime", artist: "Talking Heads", album: "Remain in Light", year: 1980, durationSec: 259, tags: "art rock afrobeat polyrhythm synth 80s" },
+      { id: "0VjIjW4GlUZAMYd2vXMi6h", title: "Weird Fishes/Arpeggi", artist: "Radiohead", album: "In Rainbows", year: 2007, durationSec: 318, tags: "art rock interlocking guitars nocturnal warm 2000s" },
+      { id: "0VjIjW4GlUZAMYd2vXMi6i", title: " María", artist: "Khruangbin", album: "Mordechai", year: 2020, durationSec: 275, tags: "psychedelic funk thai surf guitar bassline warm 2020s" },
+      { id: "0VjIjW4GlUZAMYd2vXMi6j", title: "Lady and Man", artist: "Khruangbin", album: "Con Todo El Mundo", year: 2018, durationSec: 259, tags: "funk dub guitar groove sunny 2010s" }
+    ];
+
+    // ============================================================================
     // 2. APPLICATION STATE & INDEXEDDB 6,000-TRACK PERSISTENCE ENGINE
     // ============================================================================
+    const envApiKey = ""; // Environment-injected key when running inside hosted preview
+    let previewSynth = null;
+    let previewInterval = null;
+
     let state = {
       sourceMode: 'demo', // 'demo' | 'live'
       demoCrate: [...DEFAULT_DEMO_CRATE],
@@ -887,7 +1025,12 @@
       filteredCrate: [], // Cached filtered list for 60fps virtual scroll
       eraFilter: 'ALL',
       curatedTracks: [], // Array of { ...track, reason: string }
-      llmProvider: 'gemini', // 'gemini' | 'custom'
+      llmProvider: localStorage.getItem('liked_selector_llm_provider') || 'gemini', // 'gemini' | 'custom'
+      geminiApiKey: localStorage.getItem('liked_selector_gemini_key') || '',
+      geminiModel: localStorage.getItem('liked_selector_gemini_model') || 'gemini-2.5-flash',
+      customLlmUrl: localStorage.getItem('liked_selector_custom_url') || 'http://localhost:11434/v1/chat/completions',
+      customLlmModel: localStorage.getItem('liked_selector_custom_model') || 'gemma3:12b',
+      customLlmKey: localStorage.getItem('liked_selector_custom_key') || '',
       sleeveStyleIndex: 0, // 0: HALFTONE, 1: HIFI_SPEC, 2: VINYL_GROOVE
       sfxEnabled: true,
       playingTrackId: null,
@@ -904,8 +1047,8 @@
     const VIRTUAL_ROW_HEIGHT = 54;
     const VIRTUAL_OVERSCAN = 8;
 
-    // IndexedDB Wrapper (`liked_selector_idb`) for storing up to 6,000+ tracks without hitting 5MB localStorage quota
-    const IDB_NAME = 'liked_selector_idb';
+    // IndexedDB Wrapper (`LikedSelectorDB`) for storing up to 6,000+ tracks without hitting 5MB localStorage quota
+    const IDB_NAME = 'LikedSelectorDB';
     const IDB_VERSION = 1;
     const IDB_STORE = 'crates';
 
@@ -1197,7 +1340,15 @@
 
       container.innerHTML = `<div style="position:relative; height:${totalHeight}px; width:100%;">${rowsHtml}</div>`;
     }
+
+    // ============================================================================
+    // 3. TACTILE SYNTH AUDIO ENGINE (TONE.JS) & VU METER HELPERS
+    // ============================================================================
+    function playSwitchClick(freq = 900, type = 'triangle') {
+      if (!state.sfxEnabled || typeof Tone === 'undefined') return;
+      try {
         const osc = new Tone.Oscillator(freq, type).toDestination();
+        osc.volume.value = -22;
         const env = new Tone.AmplitudeEnvelope({
           attack: 0.001,
           decay: 0.03,
@@ -1213,6 +1364,42 @@
         }, 120);
       } catch (e) {
         // Ignore audio context restrictions before user gesture
+      }
+    }
+
+    function setVuMeterActive(isActive) {
+      const segs = document.querySelectorAll('#vuMeter .vu-seg');
+      const statusText = document.getElementById('vuStatusText');
+      segs.forEach((seg, idx) => {
+        if (isActive) {
+          seg.classList.add('vu-bar-anim');
+          seg.style.animationDelay = `${(idx * 45) % 400}ms`;
+        } else {
+          seg.classList.remove('vu-bar-anim');
+          seg.style.animationDelay = '0ms';
+        }
+      });
+      if (statusText) {
+        statusText.textContent = isActive ? 'CURATING' : 'IDLE';
+        statusText.className = isActive ? 'font-mono text-[10px] text-amber animate-pulse' : 'font-mono text-[10px] text-phosphor';
+      }
+    }
+
+    function randomPresetPrompt() {
+      const idx = Math.floor(Math.random() * VIBE_PRESETS.length);
+      applyPresetPrompt(idx);
+    }
+
+    async function fetchWithRetry(url, options, maxRetries = 2) {
+      let delay = 1000;
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        const res = await fetch(url, options);
+        if (res.status !== 429 && res.status < 500) {
+          return res;
+        }
+        if (attempt === maxRetries) return res;
+        await new Promise(r => setTimeout(r, delay));
+        delay *= 2;
       }
     }
 
@@ -1295,131 +1482,6 @@
         previewSynth = null;
       }
       state.playingTrackId = null;
-    }
-
-    // ============================================================================
-    // 4. SOURCE CRATE MANAGEMENT (DEMO & LIVE SPOTIFY API)
-    // ============================================================================
-    function getActiveCrate() {
-      return state.sourceMode === 'live' && state.liveCrate.length > 0
-        ? state.liveCrate
-        : state.demoCrate;
-    }
-
-    function switchSourceMode(mode) {
-      playSwitchClick(840);
-      state.sourceMode = mode;
-
-      const demoBtn = document.getElementById('modeDemoBtn');
-      const liveBtn = document.getElementById('modeLiveBtn');
-      const ledDemo = document.getElementById('ledDemo');
-      const ledLive = document.getElementById('ledLive');
-      const liveSyncBanner = document.getElementById('liveSyncBanner');
-
-      if (mode === 'demo') {
-        demoBtn.className = 'px-2.5 py-1 rounded text-xs font-mono uppercase tracking-wider transition-all flex items-center gap-1.5 bg-amber/15 text-amber border border-amber/40';
-        liveBtn.className = 'px-2.5 py-1 rounded text-xs font-mono uppercase tracking-wider transition-all flex items-center gap-1.5 text-neutral-400 hover:text-neutral-200';
-        ledDemo.className = 'led-dot led-amber';
-        ledLive.className = 'led-dot led-off';
-        liveSyncBanner.classList.add('hidden');
-        logTelemetry('[MODE] Switched to Pre-Loaded Demo Crate (' + state.demoCrate.length + ' tracks).', 'amber');
-      } else {
-        liveBtn.className = 'px-2.5 py-1 rounded text-xs font-mono uppercase tracking-wider transition-all flex items-center gap-1.5 bg-phosphor/15 text-phosphor border border-phosphor/40';
-        demoBtn.className = 'px-2.5 py-1 rounded text-xs font-mono uppercase tracking-wider transition-all flex items-center gap-1.5 text-neutral-400 hover:text-neutral-200';
-        ledLive.className = 'led-dot led-phosphor';
-        ledDemo.className = 'led-dot led-off';
-        liveSyncBanner.classList.remove('hidden');
-
-        if (!state.spotifyToken) {
-          logTelemetry('[SPOTIFY] Live Mode selected. Open I/O Patchbay to connect OAuth PKCE or paste a Bearer Token.', 'amber');
-          openSettingsModal();
-        } else if (state.liveCrate.length === 0) {
-          fetchSpotifyLikedSongs();
-        }
-      }
-
-      renderCrateList();
-    }
-
-    function setEraFilter(era) {
-      playSwitchClick(1050);
-      state.eraFilter = era;
-      document.querySelectorAll('.era-btn').forEach(btn => {
-        if (btn.dataset.era === era) {
-          btn.className = 'era-btn px-2 py-0.5 rounded bg-amber/20 text-amber border border-amber/40 shrink-0';
-        } else {
-          btn.className = 'era-btn px-2 py-0.5 rounded bg-recessed text-neutral-400 border border-neutral-800 hover:text-neutral-200 shrink-0';
-        }
-      });
-      renderCrateList();
-    }
-
-    function clearCrateSearch() {
-      document.getElementById('crateSearchInput').value = '';
-      renderCrateList();
-    }
-
-    function renderCrateList() {
-      const container = document.getElementById('crateListContainer');
-      const query = (document.getElementById('crateSearchInput').value || '').toLowerCase().trim();
-      const clearBtn = document.getElementById('clearSearchBtn');
-      clearBtn.classList.toggle('hidden', query.length === 0);
-
-      const crate = getActiveCrate();
-      document.getElementById('demoCountBadge').textContent = state.demoCrate.length;
-
-      const filtered = crate.filter(track => {
-        const matchesQuery = !query || 
-          track.title.toLowerCase().includes(query) ||
-          track.artist.toLowerCase().includes(query) ||
-          track.album.toLowerCase().includes(query) ||
-          String(track.year).includes(query) ||
-          (track.tags && track.tags.toLowerCase().includes(query));
-
-        if (!matchesQuery) return false;
-
-        if (state.eraFilter === 'ALL') return true;
-        if (state.eraFilter === '1960s') return track.year >= 1950 && track.year < 1970;
-        if (state.eraFilter === '1970s') return track.year >= 1970 && track.year < 1980;
-        if (state.eraFilter === '1980s') return track.year >= 1980 && track.year < 1990;
-        if (state.eraFilter === '1990s+') return track.year >= 1990;
-        return true;
-      });
-
-      document.getElementById('libraryCountLabel').textContent = `${filtered.length} / ${crate.length} TRACKS`;
-
-      if (filtered.length === 0) {
-        container.innerHTML = `
-          <div class="vfd-screen rounded p-4 text-center font-mono text-xs text-neutral-500">
-            NO MATCHING TRACKS IN CRATE
-          </div>
-        `;
-        return;
-      }
-
-      const curatedIds = new Set(state.curatedTracks.map(t => t.id));
-
-      container.innerHTML = filtered.map(track => {
-        const inPlaylist = curatedIds.has(track.id);
-        return `
-          <div class="group p-2 rounded bg-recessed hover:bg-module border ${inPlaylist ? 'border-phosphor/40' : 'border-neutral-800/90'} flex items-center justify-between gap-2 transition-colors">
-            <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-1.5">
-                <span class="font-mono text-[10px] px-1 rounded bg-panel text-amber border border-neutral-800 shrink-0">${track.year || '----'}</span>
-                <p class="font-sans text-xs font-medium text-neutral-100 truncate" title="${escapeHtml(track.title)}">${escapeHtml(track.title)}</p>
-              </div>
-              <p class="font-mono text-[10px] text-neutral-400 truncate mt-0.5">${escapeHtml(track.artist)} · <span class="text-neutral-500">${escapeHtml(track.album)}</span></p>
-            </div>
-            <button 
-              onclick="toggleManualTrack('${track.id}')" 
-              title="${inPlaylist ? 'Already in Workbench (Click to remove)' : 'Add track to Workbench'}"
-              class="px-2 py-1 rounded font-mono text-[10px] shrink-0 transition-all ${inPlaylist ? 'bg-phosphor/20 text-phosphor border border-phosphor/40' : 'tactile-btn text-neutral-300 hover:text-amber'}"
-            >
-              ${inPlaylist ? '✓ IN' : '+ ADD'}
-            </button>
-          </div>
-        `;
-      }).join('');
     }
 
     function toggleManualTrack(trackId) {
@@ -1696,79 +1758,6 @@
       showToast('Purged IndexedDB crate cache and Spotify token.', 'amber');
     }
 
-      const syncBtn = document.getElementById('syncNowBtn');
-      syncBtn.disabled = true;
-      syncBtn.textContent = 'SYNCING...';
-      logTelemetry('[SPOTIFY API] GET https://api.spotify.com/v1/me/tracks?limit=50 ...', 'phosphor');
-
-      try {
-        let allTracks = [];
-        let nextUrl = 'https://api.spotify.com/v1/me/tracks?limit=50';
-        let pages = 0;
-
-        while (nextUrl && pages < 4) { // Fetch up to 200 Liked Songs quickly
-          const res = await fetch(nextUrl, {
-            headers: { 'Authorization': `Bearer ${state.spotifyToken}` }
-          });
-
-          if (res.status === 401) {
-            throw new Error('Spotify Access Token expired or invalid (401). Please update token in I/O Patchbay.');
-          }
-          if (!res.ok) {
-            throw new Error(`Spotify API returned status ${res.status}`);
-          }
-
-          const data = await res.json();
-          const items = (data.items || []).map(item => {
-            const t = item.track;
-            if (!t) return null;
-            const releaseYear = t.album?.release_date ? parseInt(t.album.release_date.slice(0, 4), 10) : 1975;
-            return {
-              id: t.id,
-              uri: t.uri || `spotify:track:${t.id}`,
-              title: t.name,
-              artist: (t.artists || []).map(a => a.name).join(', '),
-              album: t.album?.name || 'Single',
-              year: releaseYear,
-              durationSec: Math.round((t.duration_ms || 210000) / 1000),
-              previewUrl: t.preview_url || null,
-              tags: ''
-            };
-          }).filter(Boolean);
-
-          allTracks = allTracks.concat(items);
-          nextUrl = data.next;
-          pages++;
-        }
-
-        state.liveCrate = allTracks;
-        localStorage.setItem('ls_cached_liked_songs', JSON.stringify(allTracks));
-        document.getElementById('cachedCountText').textContent = allTracks.length;
-        document.getElementById('liveBtnLabel').textContent = `Live Spotify (${allTracks.length})`;
-        document.getElementById('liveSyncStatusTitle').textContent = `SYNCED ${allTracks.length} LIKED SONGS`;
-        document.getElementById('liveSyncSub').textContent = `Cached locally in browser`;
-
-        logTelemetry(`[SPOTIFY API] Successfully fetched & cached ${allTracks.length} Liked Songs.`, 'phosphor');
-        showToast(`Loaded ${allTracks.length} Liked Songs from your Spotify account!`, 'phosphor');
-        renderCrateList();
-      } catch (err) {
-        logTelemetry(`[SPOTIFY ERR] ${err.message}`, 'crimson');
-        showToast(err.message, 'amber');
-      } finally {
-        syncBtn.disabled = false;
-        syncBtn.textContent = 'SYNC CRATE';
-      }
-    }
-
-    function clearSpotifyCache() {
-      localStorage.removeItem('ls_cached_liked_songs');
-      localStorage.removeItem('ls_spotify_token');
-      state.liveCrate = [];
-      state.spotifyToken = '';
-      updateTokenBadges();
-      showToast('Cleared cached Spotify token and Liked Songs.', 'amber');
-    }
-
     function updateTokenBadges() {
       const badge = document.getElementById('tokenStatusBadge');
       if (state.spotifyToken) {
@@ -1842,6 +1831,16 @@
 
       if (availablePool.length === 0) {
         showToast('All songs from your crate are already in the playlist!', 'amber');
+        return;
+      }
+
+      // Guardrail against HTTP 403 when running locally without a Gemini key configured
+      const activeGeminiKey = (state.geminiApiKey || envApiKey || '').trim();
+      const isLocalHost = window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (state.llmProvider === 'gemini' && !activeGeminiKey && isLocalHost) {
+        openSettingsModal();
+        logTelemetry('[AI AUTH] No Gemini API Key configured for local runtime. Enter a Gemini key in I/O Patchbay, switch to Local LLM (Ollama), or click Instant Local Match.', 'amber');
+        showToast('Enter your Gemini API Key in the I/O Patchbay or switch to Local LLM (Ollama) to avoid HTTP 403!', 'amber');
         return;
       }
 
@@ -1955,7 +1954,13 @@ ${compactIndex}`;
         renderCrateList();
         renderCuratedWorkbench();
       } catch (err) {
-        logTelemetry(`[AI FALLBACK] API notice (${err.message}). Engaging deterministic local crate matcher for ${targetCount} tracks...`, 'amber');
+        if (String(err.message).includes('403')) {
+          openSettingsModal();
+          logTelemetry(`[AI 403 FIX] Gemini returned HTTP 403 (missing/invalid API key). Paste your Gemini API key in I/O Patchbay or switch to Local LLM. Using Instant Local Match for now...`, 'amber');
+          showToast('Gemini HTTP 403: Paste your Gemini API Key in I/O Patchbay or switch to Ollama Local LLM! Ran Instant Local Match.', 'amber');
+        } else {
+          logTelemetry(`[AI FALLBACK] API notice (${err.message}). Engaging deterministic local crate matcher for ${targetCount} tracks...`, 'amber');
+        }
         instantLocalKeywordFallback(appendMode);
       } finally {
         btn.disabled = false;
@@ -1965,8 +1970,9 @@ ${compactIndex}`;
     }
 
     async function callBuiltInGemini(systemInstruction, userQuery) {
-      const apiKey = "";
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+      const resolvedKey = (state.geminiApiKey || envApiKey || '').trim();
+      const modelName = state.geminiModel || 'gemini-2.5-flash';
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(resolvedKey)}`;
 
       const payload = {
         contents: [{ role: 'user', parts: [{ text: userQuery }] }],
@@ -2011,6 +2017,58 @@ ${compactIndex}`;
       if (!rawJson) throw new Error('Empty Gemini candidate payload');
       return JSON.parse(rawJson);
     }
+
+    // Support both Ollama native (/api/chat) and OpenAI-compatible (/v1/chat/completions) endpoints
+    async function callCustomLlmEndpoint(systemInstruction, userQuery) {
+      const url = (document.getElementById('customLlmUrlInput')?.value || state.customLlmUrl || 'http://localhost:11434/v1/chat/completions').trim();
+      const model = (document.getElementById('customLlmModelInput')?.value || state.customLlmModel || 'gemma3:12b').trim();
+      const apiKey = (document.getElementById('customLlmKeyInput')?.value || state.customLlmKey || '').trim();
+
+      const jsonInstruction = `${systemInstruction}\nRespond ONLY with valid JSON matching this schema: {"playlistTitle":"string","vibeDescription":"string","selectedTracks":[{"id":"string","reason":"string"}]}`;
+
+      const headers = { 'Content-Type': 'application/json' };
+      if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+
+      const isNativeOllama = url.endsWith('/api/chat');
+      const bodyPayload = isNativeOllama
+        ? {
+            model,
+            stream: false,
+            format: 'json',
+            messages: [
+              { role: 'system', content: jsonInstruction },
+              { role: 'user', content: userQuery }
+            ]
+          }
+        : {
+            model,
+            response_format: { type: 'json_object' },
+            messages: [
+              { role: 'system', content: jsonInstruction },
+              { role: 'user', content: userQuery }
+            ]
+          };
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(bodyPayload)
+      });
+
+      if (!res.ok) {
+        throw new Error(`Local LLM HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      const content = isNativeOllama
+        ? data?.message?.content
+        : data?.choices?.[0]?.message?.content;
+
+      if (!content) throw new Error('Empty response from Local LLM');
+      const cleaned = content.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+      return JSON.parse(cleaned);
+    }
+
     // Reusable deterministic local scorer supporting up to 150 tracks across 6,000-track crates
     function getLocalScoredTracks(pool, promptText, count) {
       const lower = (promptText || '').toLowerCase();
@@ -2096,193 +2154,17 @@ ${compactIndex}`;
       logTelemetry(`[LOCAL MATCH] Selected ${scored.length} tracks from ${crate.length.toLocaleString()}-song crate.`, 'phosphor');
     }
 
-    // Instant local semantic/keyword scoring matcher (also works offline or for instant testing)
-    function instantLocalKeywordFallback(appendMode = false) {
-      playSwitchClick(1000);
-      const promptText = document.getElementById('vibePromptInput').value.toLowerCase();
-      const targetCount = appendMode ? 5 : parseInt(document.getElementById('targetCountSlider').value, 10) || 12;
-      const crate = getActiveCrate();
-      const existingIds = new Set(state.curatedTracks.map(t => t.id));
-
-      const tokens = promptText
-        .replace(/[^\w\sáéíóúñãõç]/g, ' ')
-        .split(/\s+/)
-        .filter(w => w.length > 2);
-
-      const scored = crate
-        .filter(t => !appendMode || !existingIds.has(t.id))
-        .map(track => {
-          const hay = `${track.title} ${track.artist} ${track.album} ${track.year} ${track.tags || ''}`.toLowerCase();
-          let score = 0;
-          const matchedTerms = [];
-
-          for (const tok of tokens) {
-            if (hay.includes(tok)) {
-              score += 5;
-              matchedTerms.push(tok);
-            }
-          }
-          // Era bonuses
-          if (promptText.includes('70s') && track.year >= 1970 && track.year <= 1979) {
-            score += 4;
-            matchedTerms.push('1970s era');
-          }
-          if ((promptText.includes('buenos aires') || promptText.includes('baires') || promptText.includes('argentin')) && hay.includes('argentina')) {
-            score += 7;
-            matchedTerms.push('Buenos Aires Rock Nacional');
-          }
-          if ((promptText.includes('brazil') || promptText.includes('tropicalia') || promptText.includes('sunday')) && hay.includes('brazil')) {
-            score += 6;
-            matchedTerms.push('Brazilian groove');
-          }
-          if ((promptText.includes('synth') || promptText.includes('analog')) && (hay.includes('synth') || hay.includes('kraut') || hay.includes('ambient'))) {
-            score += 6;
-            matchedTerms.push('analog synth texture');
-          }
-
-          // Small deterministic tie-breaker
-          score += ((track.durationSec % 7) * 0.1);
-
-          const uniqueTerms = [...new Set(matchedTerms)].slice(0, 3);
-          const reason = uniqueTerms.length > 0
-            ? `Resonates with ${uniqueTerms.join(', ')} (${track.year} ${track.album}).`
-            : `Complementary ${track.year} sonic texture and harmonic pacing.`;
-
-          return { ...track, score, reason };
-        })
-        .sort((a, b) => b.score - a.score)
-        .slice(0, targetCount);
-
-      if (appendMode) {
-        state.curatedTracks = state.curatedTracks.concat(scored);
-      } else {
-        state.curatedTracks = scored;
-        if (promptText.includes('buenos aires') || promptText.includes('argentin')) {
-          document.getElementById('playlistTitleInput').value = 'AVENIDA CORRIENTES // 1973';
-          document.getElementById('playlistDescInput').value = 'Late-night Buenos Aires café session: poetic Argentine Rock Nacional, smoky blues, and warm 1970s analog instrumentation.';
-        } else if (promptText.includes('brazil') || promptText.includes('gardening') || promptText.includes('sun')) {
-          document.getElementById('playlistTitleInput').value = 'SOL DA MANHÃ // TROPICALIA CRATE';
-          document.getElementById('playlistDescInput').value = 'Sun-drenched Brazilian Samba-Soul, Acabou Chorare acoustic grooves, and warm Moog botanical textures.';
-        } else if (promptText.includes('synth') || promptText.includes('kraut')) {
-          document.getElementById('playlistTitleInput').value = 'MOTORIK & VOLTAGE // 1972-1998';
-          document.getElementById('playlistDescInput').value = 'Hypnotic Krautrock motorik rhythms, vintage voltage-controlled oscillators, and nocturnal tape saturation.';
-        } else {
-          document.getElementById('playlistTitleInput').value = 'SELECTA // CUSTOM CRATE MIX';
-          document.getElementById('playlistDescInput').value = `Curated from your Liked Songs library for: "${document.getElementById('vibePromptInput').value.slice(0, 90)}..."`;
-        }
-      }
-
-      renderCrateList();
-      renderCuratedWorkbench();
-      logTelemetry(`[LOCAL MATCH] Selected ${scored.length} tracks from crate.`, 'phosphor');
-    }
-
     // ============================================================================
-    // 8. SPOTIFY PLAYLIST CREATION (100-URI CHUNKED BATCHING FOR 150+ TRACKS)
+    // 7. PLAYLIST WORKBENCH & COVER ART RENDERING
     // ============================================================================
-    async function savePlaylistToSpotify() {
-      playSwitchClick(780);
-      if (state.curatedTracks.length === 0) {
-        showToast('Add or curate tracks before committing to Spotify!', 'amber');
-        return;
+    function formatDuration(totalSeconds) {
+      const secNum = Math.max(0, Math.round(totalSeconds || 0));
+      const hrs = Math.floor(secNum / 3600);
+      const mins = Math.floor((secNum % 3600) / 60);
+      const secs = secNum % 60;
+      if (hrs > 0) {
+        return `${hrs}h ${String(mins).padStart(2, '0')}m`;
       }
-
-      if (!state.spotifyToken) {
-        openSettingsModal();
-        showToast('Connect your Spotify Bearer Token or OAuth PKCE in the I/O Patchbay to write directly to your Spotify account, or click "COPY SPOTIFY URIs" to paste into Spotify Desktop!', 'amber');
-        return;
-      }
-
-      const btn = document.getElementById('saveSpotifyBtn');
-      const origHtml = btn.innerHTML;
-      btn.disabled = true;
-      btn.textContent = 'CREATING ON SPOTIFY...';
-
-      const name = document.getElementById('playlistTitleInput').value.trim() || 'LIKED // SELECTOR MIX';
-      const description = document.getElementById('playlistDescInput').value.trim() || 'Curated by LIKED // SELECTOR AI';
-
-      try {
-        logTelemetry(`[SPOTIFY API] POST https://api.spotify.com/v1/me/playlists ("${name}")...`, 'phosphor');
-
-        // 1. Create the playlist
-        const createRes = await fetch('https://api.spotify.com/v1/me/playlists', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${state.spotifyToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            name,
-            description,
-            public: false
-          })
-        });
-
-        if (!createRes.ok) {
-          throw new Error(`Playlist creation failed with HTTP ${createRes.status}`);
-        }
-
-        const playlistData = await createRes.json();
-        const playlistId = playlistData.id;
-
-        // 2. Populate items in chunks of 100 URIs (Spotify API limit is 100 URIs per POST request)
-        const allUris = state.curatedTracks.map(t => t.uri || `spotify:track:${t.id.split('_v')[0]}`);
-        const CHUNK_SIZE = 100;
-        const totalChunks = Math.ceil(allUris.length / CHUNK_SIZE);
-
-        for (let c = 0; c < totalChunks; c++) {
-          const uriBatch = allUris.slice(c * CHUNK_SIZE, (c + 1) * CHUNK_SIZE);
-          btn.textContent = `WRITING BATCH ${c + 1}/${totalChunks} (${uriBatch.length} TRKS)...`;
-          logTelemetry(`[SPOTIFY API] Committing batch ${c + 1}/${totalChunks} (${uriBatch.length} URIs)...`, 'amber');
-
-          let addRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/items`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${state.spotifyToken}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ uris: uriBatch })
-          });
-
-          if (!addRes.ok) {
-            addRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${state.spotifyToken}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({ uris: uriBatch })
-            });
-          }
-
-          if (!addRes.ok) {
-            throw new Error(`Track population batch ${c + 1} returned HTTP ${addRes.status}`);
-          }
-        }
-
-        logTelemetry(`[SPOTIFY API] Playlist "${name}" committed (${allUris.length} tracks in ${totalChunks} batch(es))!`, 'phosphor');
-        showToast(`Created "${name}" on Spotify with all ${allUris.length} tracks!`, 'phosphor');
-      } catch (err) {
-        logTelemetry(`[SPOTIFY ERR] ${err.message}`, 'crimson');
-        showToast(`Spotify API: ${err.message}. Tip: Use "COPY SPOTIFY URIs" to paste directly into Spotify Desktop!`, 'amber');
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = origHtml;
-      }
-    }
-
-    function exportFullCrateJson() {
-      playSwitchClick(920);
-      const crate = getActiveCrate();
-      const blob = new Blob([JSON.stringify(crate, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `spotify-liked-crate-${crate.length}-tracks.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      showToast(`Exported ${crate.length.toLocaleString()} crate tracks to JSON!`, 'phosphor');
-    }
       return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
     }
 
@@ -2540,7 +2422,7 @@ ${compactIndex}`;
     }
 
     // ============================================================================
-    // 8. SPOTIFY PLAYLIST CREATION (2026 API ENDPOINTS) & EXPORT TOOLS
+    // 8. SPOTIFY PLAYLIST CREATION (100-URI CHUNKED BATCHING FOR 150+ TRACKS) & EXPORT
     // ============================================================================
     async function savePlaylistToSpotify() {
       playSwitchClick(780);
@@ -2566,7 +2448,7 @@ ${compactIndex}`;
       try {
         logTelemetry(`[SPOTIFY API] POST https://api.spotify.com/v1/me/playlists ("${name}")...`, 'phosphor');
 
-        // 1. Create the playlist using the updated 2026 /me/playlists endpoint
+        // 1. Create the playlist
         const createRes = await fetch('https://api.spotify.com/v1/me/playlists', {
           method: 'POST',
           headers: {
@@ -2587,35 +2469,43 @@ ${compactIndex}`;
         const playlistData = await createRes.json();
         const playlistId = playlistData.id;
 
-        // 2. Populate items using 2026 /playlists/{id}/items endpoint with automatic fallback to /tracks
-        const uris = state.curatedTracks.map(t => t.uri || `spotify:track:${t.id}`);
+        // 2. Populate items in chunks of 100 URIs (Spotify API limit is 100 URIs per POST request)
+        const allUris = state.curatedTracks.map(t => t.uri || `spotify:track:${String(t.id).split('_v')[0]}`);
+        const CHUNK_SIZE = 100;
+        const totalChunks = Math.ceil(allUris.length / CHUNK_SIZE);
 
-        let addRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/items`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${state.spotifyToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ uris })
-        });
+        for (let c = 0; c < totalChunks; c++) {
+          const uriBatch = allUris.slice(c * CHUNK_SIZE, (c + 1) * CHUNK_SIZE);
+          btn.textContent = `WRITING BATCH ${c + 1}/${totalChunks} (${uriBatch.length} TRKS)...`;
+          logTelemetry(`[SPOTIFY API] Committing batch ${c + 1}/${totalChunks} (${uriBatch.length} URIs)...`, 'amber');
 
-        if (!addRes.ok) {
-          addRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
+          let addRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/items`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${state.spotifyToken}`,
               'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ uris })
+            body: JSON.stringify({ uris: uriBatch })
           });
+
+          if (!addRes.ok) {
+            addRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${state.spotifyToken}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ uris: uriBatch })
+            });
+          }
+
+          if (!addRes.ok) {
+            throw new Error(`Track population batch ${c + 1} returned HTTP ${addRes.status}`);
+          }
         }
 
-        if (!addRes.ok) {
-          throw new Error(`Track population returned HTTP ${addRes.status}`);
-        }
-
-        logTelemetry(`[SPOTIFY API] Playlist "${name}" committed (${uris.length} tracks)!`, 'phosphor');
-        showToast(`Created "${name}" in your Spotify account with ${uris.length} tracks!`, 'phosphor');
+        logTelemetry(`[SPOTIFY API] Playlist "${name}" committed (${allUris.length} tracks in ${totalChunks} batch(es))!`, 'phosphor');
+        showToast(`Created "${name}" on Spotify with all ${allUris.length} tracks!`, 'phosphor');
       } catch (err) {
         logTelemetry(`[SPOTIFY ERR] ${err.message}`, 'crimson');
         showToast(`Spotify API: ${err.message}. Tip: Use "COPY SPOTIFY URIs" to paste directly into Spotify Desktop!`, 'amber');
@@ -2623,6 +2513,19 @@ ${compactIndex}`;
         btn.disabled = false;
         btn.innerHTML = origHtml;
       }
+    }
+
+    function exportFullCrateJson() {
+      playSwitchClick(920);
+      const crate = getActiveCrate();
+      const blob = new Blob([JSON.stringify(crate, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `spotify-liked-crate-${crate.length}-tracks.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast(`Exported ${crate.length.toLocaleString()} crate tracks to JSON!`, 'phosphor');
     }
 
     function copySpotifyTrackUris() {
@@ -2705,7 +2608,12 @@ ${compactIndex}`;
       document.getElementById('detectedRedirectUri').textContent = window.location.origin + window.location.pathname;
       document.getElementById('spotifyClientIdInput').value = state.spotifyClientId;
       document.getElementById('manualTokenInput').value = state.spotifyToken;
-      document.getElementById(' settingsModal');
+      document.getElementById('geminiApiKeyInput').value = state.geminiApiKey;
+      document.getElementById('geminiModelSelect').value = state.geminiModel;
+      document.getElementById('customLlmUrlInput').value = state.customLlmUrl;
+      document.getElementById('customLlmModelInput').value = state.customLlmModel;
+      document.getElementById('customLlmKeyInput').value = state.customLlmKey;
+      updateGeminiKeyStatusText();
       document.getElementById('settingsModal').classList.remove('hidden');
     }
 
@@ -2714,24 +2622,61 @@ ${compactIndex}`;
       document.getElementById('settingsModal').classList.add('hidden');
     }
 
+    function saveAiEngineConfig() {
+      state.geminiApiKey = (document.getElementById('geminiApiKeyInput')?.value || '').trim();
+      state.geminiModel = document.getElementById('geminiModelSelect')?.value || 'gemini-2.5-flash';
+      state.customLlmUrl = (document.getElementById('customLlmUrlInput')?.value || 'http://localhost:11434/v1/chat/completions').trim();
+      state.customLlmModel = (document.getElementById('customLlmModelInput')?.value || 'gemma3:12b').trim();
+      state.customLlmKey = (document.getElementById('customLlmKeyInput')?.value || '').trim();
+
+      localStorage.setItem('liked_selector_gemini_key', state.geminiApiKey);
+      localStorage.setItem('liked_selector_gemini_model', state.geminiModel);
+      localStorage.setItem('liked_selector_custom_url', state.customLlmUrl);
+      localStorage.setItem('liked_selector_custom_model', state.customLlmModel);
+      localStorage.setItem('liked_selector_custom_key', state.customLlmKey);
+
+      updateGeminiKeyStatusText();
+      setLlmProvider(state.llmProvider);
+    }
+
+    function updateGeminiKeyStatusText() {
+      const statusEl = document.getElementById('geminiKeyStatusText');
+      if (!statusEl) return;
+      if (state.geminiApiKey) {
+        statusEl.textContent = `Custom Gemini Key Saved (${state.geminiModel})`;
+        statusEl.className = 'text-phosphor font-bold';
+      } else if (envApiKey) {
+        statusEl.textContent = 'Environment Key Active';
+        statusEl.className = 'text-phosphor';
+      } else {
+        statusEl.textContent = 'No Personal Key Set (Paste key above if running outside Canvas)';
+        statusEl.className = 'text-amber';
+      }
+    }
+
     function setLlmProvider(provider) {
       playSwitchClick(950);
       state.llmProvider = provider;
+      localStorage.setItem('liked_selector_llm_provider', provider);
+
       const geminiBtn = document.getElementById('engineGeminiBtn');
       const customBtn = document.getElementById('engineCustomBtn');
+      const geminiBox = document.getElementById('geminiLlmConfigBox');
       const customBox = document.getElementById('customLlmConfigBox');
       const badge = document.getElementById('llmEngineBadge');
 
       if (provider === 'gemini') {
         geminiBtn.className = 'p-2.5 rounded border text-left font-mono text-xs transition-all border-amber bg-amber/10 text-amber';
         customBtn.className = 'p-2.5 rounded border text-left font-mono text-xs transition-all border-neutral-800 bg-panel text-neutral-400';
-        customBox.classList.add('hidden');
-        badge.textContent = 'ENGINE: GEMINI-3-FLASH';
+        if (geminiBox) geminiBox.classList.remove('hidden');
+        if (customBox) customBox.classList.add('hidden');
+        badge.textContent = `ENGINE: ${(state.geminiModel || 'GEMINI').toUpperCase()}`;
       } else {
         customBtn.className = 'p-2.5 rounded border text-left font-mono text-xs transition-all border-amber bg-amber/10 text-amber';
         geminiBtn.className = 'p-2.5 rounded border text-left font-mono text-xs transition-all border-neutral-800 bg-panel text-neutral-400';
-        customBox.classList.remove('hidden');
-        badge.textContent = 'ENGINE: LOCAL LLM';
+        if (geminiBox) geminiBox.classList.add('hidden');
+        if (customBox) customBox.classList.remove('hidden');
+        badge.textContent = `LOCAL: ${(state.customLlmModel || 'OLLAMA').toUpperCase()}`;
       }
     }
 
@@ -2833,6 +2778,8 @@ ${compactIndex}`;
     // ============================================================================
     window.onload = async function () {
       syncLimitChanged(state.maxSyncLimit);
+      setLlmProvider(state.llmProvider);
+      updateGeminiKeyStatusText();
 
       // Load cached Spotify Liked Songs from IndexedDB (supports 6,000+ tracks)
       const cached = await loadCrateFromIDB('live_liked_songs');
